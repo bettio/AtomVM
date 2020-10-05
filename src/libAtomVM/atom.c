@@ -55,20 +55,61 @@ int atom_are_equals(AtomString a, AtomString b)
 
 void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, int arity)
 {
+
+    char arity_num_digits = 0;
+    // Simple calculation because we don't expect arities greater than 255
+    if (arity < 10) {
+        arity_num_digits = 1;
+    } else if (arity < 100) {
+        arity_num_digits = 2;
+    } else {
+        arity_num_digits = 3;
+    }
+
     unsigned int module_name_len = atom_string_len(module);
     memcpy(buf, atom_string_data(module), module_name_len);
 
     buf[module_name_len] = ':';
 
     unsigned int function_name_len = atom_string_len(function);
-    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > buf_size))) {
+    if (UNLIKELY((arity > MAX_ARITY_VALUE) || ((module_name_len + function_name_len + 3 + arity_num_digits) > buf_size)))
+    {
         fprintf(stderr, "Insufficient room to write mfa.\n");
         abort();
     }
     memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
 
-    //TODO: handle functions with more than 9 parameters
-    buf[module_name_len + function_name_len + 1] = '/';
-    buf[module_name_len + function_name_len + 2] = '0' + arity;
-    buf[module_name_len + function_name_len + 3] = 0;
+    // Calculate the offset so we can get the pointer to the following unfilled position in the buffer
+    unsigned int offset = sizeof(char) * (module_name_len + function_name_len + 1);
+    char *arity_offset_start = buf + offset;
+    concat_arity(arity_offset_start, arity_num_digits+2, arity);
+}
+
+void concat_arity(char *arity_offset_start, char max_len, int arity) {
+    // set this to another variable so we can mutate it and calculate
+    // the digits as separate numbers
+    int n = arity;
+    char first_digit = n % 10;
+    n = n / 10;
+    char second_digit = n % 10;
+    n = n / 10;
+    char third_digit = n % 10;
+
+    char suffix[4] = {'/', '\0', '\0', '\0'};
+
+    // Since we always have at most 3 chars for the arity
+    // And most functions have < 10 chars, this logic is
+    // sufficient to handle the string conversion
+    if (arity < 10) {
+        suffix[1] = first_digit;
+    } else if (arity < 100) {
+        suffix[1] = second_digit;
+        suffix[2] = first_digit;
+    } else {
+        suffix[1] = third_digit;
+        suffix[2] = second_digit;
+        suffix[3] = first_digit;
+    }
+
+    memcpy(arity_offset_start, suffix, max_len);
 }
