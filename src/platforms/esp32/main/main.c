@@ -41,8 +41,6 @@ const void *avm_partition(const char *partition_name, int *size);
 
 void app_main()
 {
-    printf("Sarting AtomVM " __DATE__ "\n");
-
     esp32_sys_queue_init();
 
     int size;
