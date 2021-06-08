@@ -17,17 +17,17 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-#include "freertos/FreeRTOS.h"
-#include "esp_partition.h"
-#include "esp_system.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
+#include "esp_partition.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
 
 #include "atom.h"
 #include "avmpack.h"
 #include "bif.h"
-#include "component_ports.h"
 #include "component_nifs.h"
+#include "component_ports.h"
 #include "context.h"
 #include "globalcontext.h"
 #include "iff.h"
@@ -41,6 +41,8 @@ const void *avm_partition(const char *partition_name, int *size);
 
 void app_main()
 {
+    printf("Sarting AtomVM " __DATE__ "\n");
+
     esp32_sys_queue_init();
 
     int size;
@@ -79,6 +81,11 @@ void app_main()
         }
         avmpack_data->data = lib_avm;
         list_append(&glb->avmpack_data, (struct ListHead *) avmpack_data);
+
+        if (avmpack_find_section_by_flag(lib_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size,
+                &startup_module_name)) {
+            printf("Found bootable lib.avm partition.\n");
+        }
     } else {
         fprintf(stderr, "Unable to mount lib.avm partition.  Ignoring...\n");
     }
