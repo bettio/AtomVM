@@ -31,6 +31,10 @@ static inline term *mailbox_message_memory(Message *msg)
 
 void mailbox_send(Context *c, term t)
 {
+    if (IS_NULL_PTR(c)) {
+        return;
+    }
+
     TRACE("Sending 0x%lx to pid %i\n", t, c->process_id);
 
     unsigned long estimated_mem_usage = memory_estimate_usage(t);
