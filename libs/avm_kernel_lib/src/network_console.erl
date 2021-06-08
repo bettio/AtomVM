@@ -1,12 +1,8 @@
 -module(network_console).
 
--export([start/0, listen/1, start_repl/1]).
+-export([listen/1, start_repl/1]).
 
 -record(nc_state, {socket, pending_pid, pending_ref}).
-
-start() ->
-    listen(2323),
-    sleep_forever().
 
 listen(Port) ->
     case gen_tcp:listen(Port, []) of
@@ -58,10 +54,6 @@ peer_address(Socket) ->
 
 to_string({{A,B,C,D}, Port}) ->
     io_lib:format("~p.~p.~p.~p:~p", [A,B,C,D, Port]).
-
-sleep_forever() ->
-    timer:sleep(10000),
-    sleep_forever().
 
 start_repl(SocketIOLeader) ->
     erlang:group_leader(SocketIOLeader, self()),
