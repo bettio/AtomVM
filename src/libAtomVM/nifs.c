@@ -146,6 +146,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
+static term nif_atomvm_all_avmpack_sections(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
@@ -560,6 +561,13 @@ static const struct Nif atomvm_read_priv_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_read_priv
 };
+
+static const struct Nif atomvm_all_avmpack_sections_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_all_avmpack_sections
+};
+
 static const struct Nif console_print_nif =
 {
     .base.type = NIFFunctionType,
@@ -2910,6 +2918,96 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
 
     free(complete_path);
     return UNDEFINED_ATOM;
+}
+
+struct AVMPackCountAccum
+{
+    int count;
+    int total_name_size;
+    uint32_t flags;
+};
+
+struct AVMPackListAccum
+{
+    Context *ctx;
+    term list;
+    uint32_t flags;
+};
+
+static void *avmpack_count_sections(void *accum, const void *section_ptr, uint32_t section_size,
+        const void *beam_ptr, uint32_t flags, const char *section_name)
+{
+    UNUSED(beam_ptr);
+
+    struct AVMPackCountAccum *accum_struct = (struct AVMPackCountAccum *) accum;
+
+    if (flags & accum_struct->flags == accum_struct->flags) {
+        accum_struct->count++;
+        accum_struct->total_name_size +=  term_binary_data_size_in_terms(strlen(section_name)) + BINARY_HEADER_SIZE;
+    }
+
+    return accum;
+}
+
+static void *avmpack_sections(void *accum, const void *section_ptr, uint32_t section_size,
+        const void *beam_ptr, uint32_t flags, const char *section_name)
+{
+    UNUSED(beam_ptr);
+
+    struct AVMPackListAccum *accum_struct = (struct AVMPackCountAccum *) accum;
+
+    if (flags & accum_struct->flags == accum_struct->flags) {
+        accum_struct->list;
+
+        term sec_name = term_from_literal_binary(section_name, strlen(section_name), accum_struct->ctx);
+        term *list_ptr = term_list_alloc(accum_struct->ctx);
+        accum_struct->list = term_list_init_prepend(list_ptr, sec_name, accum_struct->list);
+    }
+
+    return accum;
+}
+
+// AtomVM extension
+static term nif_atomvm_all_avmpack_sections(Context *ctx, int argc, term argv[])
+{
+    term opts = argv[0];
+    VALIDATE_VALUE(argv[0], term_is_list);
+
+    term start_atom = context_make_atom(ctx, "\x5" "start");
+    term has_start_flag = interop_proplist_get_value_default(opts, start_atom, FALSE_ATOM);
+
+    int flags = 0;
+    if (has_start_flag == TRUE_ATOM) {
+        flags |= BEAM_START_FLAG;
+    }
+
+    struct ListHead *item;
+
+    struct AVMPackCountAccum count_accum_struct;
+    count_accum_struct.count = 0;
+    count_accum_struct.total_name_size = 0;
+    count_accum_struct.flags = flags;
+    LIST_FOR_EACH (item, &ctx->global->avmpack_data) {
+        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        avmpack_fold(&count_accum_struct, avmpack_data->data, avmpack_count_sections);
+    }
+
+    int ensure = count_accum_struct.total_name_size + 2 * count_accum_struct.count;
+
+    if (UNLIKELY(memory_ensure_free(ctx, ensure) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    struct AVMPackListAccum list_accum_struct;
+    list_accum_struct.ctx = ctx;
+    list_accum_struct.list = term_nil();
+    list_accum_struct.flags = 0;
+    LIST_FOR_EACH (item, &ctx->global->avmpack_data) {
+        struct AVMPackData *avmpack_data = (struct AVMPackData *) item;
+        avmpack_fold(&list_accum_struct, avmpack_data->data, avmpack_sections);
+    }
+
+    return list_accum_struct.list;
 }
 
 static term nif_console_print(Context *ctx, int argc, term argv[])
