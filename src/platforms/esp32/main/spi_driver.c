@@ -36,9 +36,11 @@
 #include "mailbox.h"
 #include "module.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "term.h"
 #include "utils.h"
 
+// #define ENABLE_TRACE
 #include "trace.h"
 
 #include "esp32_sys.h"
@@ -249,8 +251,8 @@ static void spidriver_consume_mailbox(Context *ctx)
             ret = ERROR_ATOM;
     }
 
-    mailbox_destroy_message(message);
+    term ret_msg = port_create_tuple2(ctx, term_get_tuple_element(msg, 1), ret);
+    mailbox_send(target, ret_msg);
 
-    UNUSED(ref);
-    mailbox_send(target, ret);
+    mailbox_destroy_message(message);
 }
